@@ -6,3 +6,6 @@
 		flutter config --enable-web
 		flutter build web --release
 	"""
+
+[build.environment]
+	FLUTTER_VERSION = "stable"
