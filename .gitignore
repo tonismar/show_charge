@@ -45,3 +45,4 @@ app.*.map.json
 /android/app/release
 
 assets/flutter-474004-aad09c754a74.json
+assets/.env

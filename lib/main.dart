@@ -1,8 +1,7 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
-import 'package:googleapis/sheets/v4.dart' as sheets;
-import 'package:googleapis_auth/auth_io.dart';
-import 'package:flutter/services.dart' show rootBundle;
+import 'package:http/http.dart' as http;
+import 'package:google_sign_in/google_sign_in.dart';
 
 void main() {
   runApp(const MyApp());
@@ -39,11 +38,91 @@ class FormScreen extends StatefulWidget {
 class _FormScreenState extends State<FormScreen> {
   final _descriptionController = TextEditingController();
   final _chargeController = TextEditingController();
+  GoogleSignInAccount? _currentUser;
+  String? _spreadsheetId;
   bool _loading = false;
 
-  final String _spreadsheetId = '1D0TXCXJb_iAbokNpp6by8Orxv9OTtLj8ulWK3GhRRrw';
+  final GoogleSignIn _googleSignIn = GoogleSignIn(
+    clientId: '390125749205-m44f9grqr1l5dpcp2fqm09l1tifouctt.apps.googleusercontent.com',
+    scopes: [
+      'https://www.googleapis.com/auth/spreadsheets',
+      'https://www.googleapis.com/auth/drive.file',
+    ],
+  );
+
+  @override
+  void initState() {
+    super.initState();
+    _googleSignIn.onCurrentUserChanged.listen((account) {
+      setState(() {
+        _currentUser = account;
+      });
+    });
+    _googleSignIn.signInSilently(); 
+  }
+
+  Future<void> _handleSignIn() async {
+    try {
+      await _googleSignIn.signIn();
+    } catch (error) {
+      debugPrint('Error signing in: $error');
+    }
+  }
+
+  Future<void> _createSpreadsheet() async {
+    final authHeaders = await _currentUser?.authHeaders;
+    if (authHeaders == null) return;
+
+    final response = await http.post(
+      Uri.parse('https://sheets.googleapis.com/v4/spreadsheets'),
+      headers: {
+        'Authorization': authHeaders['Authorization']!,
+        'Content-Type': 'application/json',
+      },
+      body: jsonEncode({
+        'properties': {
+          'title': 'Show Charges'
+        },
+        'sheets': [
+          {
+            'properties': {
+              'title': 'Charges',
+            },
+            'data': {
+              'rowData': [
+                {
+                  'values': [
+                    {'userEnteredValue': {'stringValue': 'Description'}},
+                    {'userEnteredValue': {'stringValue': 'Charge'}},
+                    {'userEnteredValue': {'stringValue': 'Date'}},
+                  ]
+                }
+              ]
+            }
+          }
+        ]
+      }),
+    );
+
+    if (response.statusCode == 200) {
+      final data = jsonDecode(response.body);
+      setState(() {
+        _spreadsheetId = data['spreadsheetId'];
+      });
+    } else {
+      debugPrint('Error creating spreadsheet: ${response.body}');
+    }
+  }
 
   Future<void> _submitData() async {
+    if (_spreadsheetId == null) {
+      await _createSpreadsheet();
+      if (_spreadsheetId == null) return;
+    }
+
+    final authHeaders = await _currentUser?.authHeaders;
+    if (authHeaders == null) return;
+
     final description = _descriptionController.text;
     final charge = _chargeController.text;
 
@@ -51,47 +130,37 @@ class _FormScreenState extends State<FormScreen> {
       return;
     }
 
+    final range = 'Charges!A:C';
+    final body = {
+      'values': [
+        [description, charge, DateTime.now().toIso8601String()]
+      ]
+    };
+
     setState(() {
       _loading = true;
     });
 
-    try {
-      final credentialsJson = json.decode(await rootBundle.loadString('assets/flutter-474004-aad09c754a74.json'));
-      
-      final accountCredentials = ServiceAccountCredentials.fromJson(credentialsJson);
-      final scopes = [
-        sheets.SheetsApi.spreadsheetsScope,
-        'https://www.googleapis.com/auth/drive.file',
-      ];
+    final response = await http.post(
+      Uri.parse(
+        'https://sheets.googleapis.com/v4/spreadsheets/$_spreadsheetId/values/$range:append?valueInputOption=USER_ENTERED'),
+      headers: {
+        'Authorization': authHeaders['Authorization']!,
+        'Content-Type': 'application/json',
+      },
+      body: jsonEncode(body),
+    );
 
-      final client = await clientViaServiceAccount(accountCredentials, scopes);
-
-      final sheetsApi = sheets.SheetsApi(client);
-
-      final now = DateTime.now().toString();
-
-      final values = [
-        [description, charge, now],
-      ];
-
-      final valueRange = sheets.ValueRange(values: values);
-
-      await sheetsApi.spreadsheets.values.append(
-        valueRange,
-        _spreadsheetId,
-        'A:C',
-        valueInputOption: 'RAW',
-      );
-
+    if (response.statusCode == 200) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Data submitted successfully')),
       );
-
       _descriptionController.clear();
       _chargeController.clear();
-    } catch (e) {
+    } else {
+      debugPrint('Error submitting data: ${response.body}');
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error submitting data: $e')),
+        SnackBar(content: Text('Error submitting data: ${response.body}')),
       );
     }
 
@@ -102,6 +171,24 @@ class _FormScreenState extends State<FormScreen> {
 
   @override
   Widget build(BuildContext context) {
+    if (_currentUser == null) {
+      return Scaffold(
+        body: Center(
+          child: ElevatedButton.icon(
+            icon: const Icon(Icons.login),
+            label: const Text('Sign in with Google', style: TextStyle(fontSize: 18)),
+            style: ElevatedButton.styleFrom(
+              padding: const EdgeInsets.symmetric(horizontal: 40, vertical: 14),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+            ),
+            onPressed: _handleSignIn,
+          ),
+        ),
+      );
+    }
+    
     return Scaffold(
       body: Container(
         decoration: const BoxDecoration(
