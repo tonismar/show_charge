@@ -1,0 +1,48 @@
+plugins = []
+
+[functions]
+
+[functions."*"]
+
+[build]
+publish = "/Users/tonismarr/Coder/show_charge/build/web"
+publishOrigin = "config"
+commandOrigin = "config"
+command = "\t\tgit clone https://github.com/flutter/flutter.git --branch stable --depth 1\n\t\texport PATH=\"$PATH:$(pwd)/flutter/bin\"\n\t\tflutter config --enable-web\n\t\tflutter build web --release\n\t"
+
+[build.environment]
+FLUTTER_VERSION = "stable"
+
+[build.processing]
+
+[build.processing.css]
+
+[build.processing.html]
+
+[build.processing.images]
+
+[build.processing.js]
+
+[build.services]
+
+[[headers]]
+for = "/*"
+
+[headers.values]
+X-Frame-Options = "DENY"
+X-XSS-Protection = "1; mode=block"
+X-Content-Type-Options = "nosniff"
+Referrer-Policy = "strict-origin-when-cross-origin"
+Content-Security-Policy = "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://accounts.google.com https://apis.google.com; style-src 'self' 'unsafe-inline' https://accounts.google.com; frame-src 'self' https://accounts.google.com; connect-src 'self' https://accounts.google.com https://www.googleapis.com https://sheets.googleapis.com https://oauth2.googleapis.com; img-src 'self' data: https:; font-src 'self' data:;"
+
+[[redirects]]
+from = "/*"
+to = "/index.html"
+status = 200.0
+force = false
+
+[redirects.query]
+
+[redirects.conditions]
+
+[redirects.headers]
